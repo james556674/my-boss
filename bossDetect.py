@@ -26,6 +26,7 @@ class GameBot:
         self.bot_thread = None
         self.is_running = False
         self.current_state = BotState.STOPPED
+        self.boss_detected = False  # 新增：記錄是否偵測到 Boss
 
         self.templates = {
             "login_scene_indicator": None, "char_select_scene_indicator": None,
@@ -179,7 +180,9 @@ class GameBot:
             # 檢查 Boss 指示器
             if self.is_image_on_screen("boss_indicator"):
                 self.log("🎉🎉🎉 偵測到 BOSS！ 🎉🎉🎉")
-                return True
+                self.boss_detected = True  # 設置 Boss 偵測標記
+                # 不停止，繼續運作
+                return False  # 返回 False 讓機器人繼續到下一個狀態
             else:
                 # 每10次掃描顯示一次調試資訊（因為現在掃描更頻繁）
                 if scan_count % 10 == 0:
@@ -473,8 +476,12 @@ class GameBot:
                     self.log("找不到角色選擇按鈕，重新判斷場景...")
                     self.current_state = BotState.DETERMINING_STATE
             elif self.current_state == BotState.IN_GAME_SCANNING:
-                if self.scan_for_boss(): self.stop_bot()
-                else: self.current_state = BotState.OPENING_CHANNEL_LIST
+                if self.scan_for_boss(): 
+                    self.log("偵測到 Boss，但繼續運作...")
+                    # 繼續到下一個狀態而不是停止
+                    self.current_state = BotState.OPENING_CHANNEL_LIST
+                else: 
+                    self.current_state = BotState.OPENING_CHANNEL_LIST
             elif self.current_state == BotState.OPENING_CHANNEL_LIST:
                 pyautogui.press('esc')
                 time.sleep(1)
@@ -486,6 +493,14 @@ class GameBot:
                     pyautogui.press('esc')
                     self.current_state = BotState.IN_GAME_SCANNING
             elif self.current_state == BotState.SWITCHING_CHANNEL:
+                # 如果偵測到 Boss，先擷取圖片
+                if self.boss_detected:
+                    self.log("偵測到 Boss，先擷取頻道切換畫面...")
+                    screenshot = pyautogui.screenshot()
+                    screenshot.save(f"boss_channel_switch_{int(time.time())}.png")
+                    self.log("已保存 Boss 頻道切換截圖")
+                    self.boss_detected = False  # 重置標記
+                
                 if not self.find_and_click("switch_channel_button"): self.stop_bot(); continue
                 time.sleep(1)
                 if not self.find_and_click("confirm_button"): self.stop_bot(); continue
