@@ -5,6 +5,8 @@ import time
 import pyautogui
 import cv2
 import numpy as np
+import requests
+import io
 
 # Using the previous scene-aware state machine
 class BotState:
@@ -79,6 +81,7 @@ class GameBot:
         ttk.Button(test_frame, text="測試Boss指示器識別", command=self.test_boss_indicator).pack(fill=tk.X)
         ttk.Button(test_frame, text="模擬實際掃描流程", command=self.simulate_scanning).pack(fill=tk.X)
         ttk.Button(test_frame, text="詳細Boss偵測分析", command=self.detailed_boss_analysis).pack(fill=tk.X)
+        ttk.Button(test_frame, text="測試Discord通知", command=self.test_discord_webhook).pack(fill=tk.X)
 
         # --- Status & Log ---
         status_frame = ttk.LabelFrame(main_frame, text="4. 狀態與日誌", padding="10")
@@ -198,8 +201,8 @@ class GameBot:
                     if max_val >= self.confidence_var.get() * 0.7:  # 70% 的閾值
                         self.log(f"⚠️ 接近偵測閾值！信心度: {max_val:.3f}")
                         # 保存接近閾值的截圖
-                        screenshot.save(f"near_threshold_{int(time.time())}.png")
-                        self.log("已保存接近閾值的截圖")
+                        # screenshot.save(f"near_threshold_{int(time.time())}.png")
+                        # self.log("已保存接近閾值的截圖")
             
             time.sleep(0.1)  # 更頻繁的檢查
         
@@ -415,6 +418,22 @@ class GameBot:
         
         self.log("=== 詳細分析結束 ===")
 
+    def test_discord_webhook(self):
+        """測試Discord webhook功能"""
+        webhook_url = "https://discord.com/api/webhooks/1386667578851594321/_ZE9Le1nYCB285f3Tn1aixfRPOrS0xH9fYa2TNeV-ptXhjRBgF-SymDiH3axqJKvkgWb"
+        payload = {"content": "🤖 測試訊息：Boss偵測機器人已連線！"}
+        
+        try:
+            self.log("正在發送測試訊息到 Discord...")
+            response = requests.post(webhook_url, json=payload)
+            
+            if 200 <= response.status_code < 300:
+                self.log("✅ Discord 測試訊息發送成功！")
+            else:
+                self.log(f"❌ Discord 測試訊息發送失敗: {response.status_code}, {response.text}")
+        except Exception as e:
+            self.log(f"❌ 發送 Discord 測試訊息時發生錯誤: {e}")
+
     def determine_initial_state(self):
         self.log("正在判斷當前遊戲場景...")
         
@@ -497,8 +516,35 @@ class GameBot:
                 if self.boss_detected:
                     self.log("偵測到 Boss，先擷取頻道切換畫面...")
                     screenshot = pyautogui.screenshot()
-                    screenshot.save(f"boss_channel_switch_{int(time.time())}.png")
-                    self.log("已保存 Boss 頻道切換截圖")
+                    # screenshot.save(f"boss_channel_switch_{int(time.time())}.png")
+                    # self.log("已保存 Boss 頻道切換截圖")
+                    
+                    # 發送到 Discord
+                    webhook_url = "https://discord.com/api/webhooks/1386667578851594321/_ZE9Le1nYCB285f3Tn1aixfRPOrS0xH9fYa2TNeV-ptXhjRBgF-SymDiH3axqJKvkgWb"
+                    payload = {"content": "🎉🎉🎉 偵測到 BOSS！ 🎉🎉🎉"}
+                    
+                    try:
+                        # 將截圖轉換為 bytes
+                        with io.BytesIO() as image_binary:
+                            screenshot.save(image_binary, 'PNG')
+                            image_binary.seek(0)
+                            
+                            # 準備檔案資料
+                            files = {
+                                'file': ('boss_detected.png', image_binary.getvalue(), 'image/png')
+                            }
+                            
+                            # 發送訊息和圖片
+                            self.log("正在發送 Boss 偵測通知到 Discord...")
+                            response = requests.post(webhook_url, data=payload, files=files)
+                        
+                        if 200 <= response.status_code < 300:
+                            self.log("✅ Discord 通知發送成功！")
+                        else:
+                            self.log(f"❌ Discord 通知發送失敗: {response.status_code}")
+                    except Exception as e:
+                        self.log(f"❌ 發送 Discord 通知時發生錯誤: {e}")
+                    
                     self.boss_detected = False  # 重置標記
                 
                 if not self.find_and_click("switch_channel_button"): self.stop_bot(); continue
